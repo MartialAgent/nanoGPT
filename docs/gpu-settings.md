@@ -1,129 +1,138 @@
-# GPU 설정 가이드 — RTX 4060 Laptop GPU 기준
+# GPU 설정 가이드 — RTX 2070 Desktop GPU 기준
 
 ## 현재 환경
 
 | 항목 | 값 |
 |---|---|
-| GPU 모델 | NVIDIA GeForce RTX 4060 Laptop GPU |
+| GPU 모델 | NVIDIA GeForce RTX 2070 |
 | VRAM | 8 GB |
-| 드라이버 | 552.27 |
-| Compute Capability | 8.9 (Ada Lovelace) |
+| 드라이버 | 591.86 |
+| CUDA | 13.1 |
+| Compute Capability | 7.5 (Turing) |
+| 아키텍처 | Turing (2세대 Tensor Core) |
 
 ---
 
-## 수정된 설정값
+## 수정된 파일 목록 및 변경 내용
 
-### `train.py`
+### 1. `train.py` (학습 스크립트)
 
-```python
-batch_size = 8                        # VRAM 8GB 기준 안전한 micro-batch 크기
-gradient_accumulation_steps = 5 * 12  # 실효 배치 480 유지 (60 × 8 = 480)
-device = 'cuda'                        # NVIDIA GPU 사용
-dtype = 'bfloat16'                     # 자동 감지 (Compute Cap 8.9 → bfloat16 지원)
-compile = True                         # PyTorch 2.0 컴파일 최적화 (40xx에서 동작)
-```
-
-### `model.py`
-
-```python
-flops_promised = 126e12  # RTX 4060 Laptop BF16 피크 성능 (126 TFLOPS)
-```
-
----
-
-## 설정값 계산 근거
-
-### batch_size: 12 → 8
-
-학습 중 GPU 메모리는 다음 항목들이 차지합니다:
-
-- 모델 파라미터 (GPT-2 Small 124M × 2바이트 = ~0.25 GB)
-- Optimizer 상태 (파라미터의 2배 = ~0.5 GB)
-- 활성화값 (Activation): **배치 크기에 비례해 증가** — 가장 큰 변수
-- 그래디언트
-
-8GB VRAM에서 `batch_size=12`, `block_size=1024`로 GPT-2 규모 학습 시 OOM(Out of Memory) 위험이 있습니다. `batch_size=8`은 여유 버퍼를 확보한 안전 값입니다.
-
-### gradient_accumulation_steps: 40 → 60
-
-`batch_size`를 줄이면 한 번에 보는 데이터가 줄어 학습 품질이 떨어질 수 있습니다.  
-`gradient_accumulation_steps`는 **여러 micro-batch의 그래디언트를 쌓아** 큰 배치와 동일한 효과를 냅니다.
-
-```
-실효 배치 크기 = batch_size × gradient_accumulation_steps
-변경 전: 12 × 40 = 480
-변경 후:  8 × 60 = 480  ← 동일
-```
-
-메모리는 절약하면서 학습 안정성은 유지됩니다.
-
-### dtype: bfloat16 자동 선택
-
-RTX 4060 (Ada Lovelace, Compute Cap 8.9)은 bfloat16을 하드웨어 수준에서 지원합니다.  
-`float32` 대비 메모리 절반, 속도 2배 이상이며, `float16` 대비 수치 안정성이 높습니다.
-
-### flops_promised: 312e12 → 126e12
-
-`estimate_mfu()`는 학습 중 GPU 활용률을 출력합니다. 기준값이 A100(312 TFLOPS)으로 고정되어 있으면 RTX 4060에서 MFU가 0.4 이상 나올 수 없어 수치가 의미 없어집니다.  
-RTX 4060 Laptop의 실제 BF16 피크인 **126 TFLOPS**로 교체해 MFU가 실제 GPU 활용률을 반영하도록 했습니다.
-
----
-
-## 사업담당자를 위한 설명
-
-### "GPU"가 왜 중요한가?
-
-GPT 같은 언어 모델은 수억 개의 숫자를 동시에 곱하고 더하는 연산을 반복합니다.  
-CPU는 이 연산을 순서대로 처리하지만, GPU는 수천 개의 코어로 **병렬 처리**합니다.  
-같은 학습을 CPU로 하면 몇 주, GPU로 하면 몇 시간~며칠로 줄어드는 이유입니다.
-
-### "VRAM 8GB"의 의미
-
-VRAM은 GPU 전용 메모리입니다. 학습 중 모델, 데이터, 중간 계산값이 모두 VRAM에 올라가야 합니다.  
-VRAM이 부족하면 학습이 중단됩니다(OOM 에러).
-
-- **8GB VRAM** → GPT-2 Small(124M 파라미터) 수준까지 학습 가능
-- **GPT-2 Medium(345M)** → 배치 크기를 대폭 줄이면 가능하나 속도 저하
-- **GPT-3(175B)** → 불가. 데이터센터 수십 개 GPU 필요
-
-### "batch_size"와 "gradient_accumulation"이란?
-
-**batch_size**는 모델이 한 번에 읽는 문장 묶음의 수입니다.  
-많이 읽을수록 학습이 안정적이지만 메모리를 많이 씁니다.
-
-**gradient_accumulation**은 메모리 제약을 우회하는 기법입니다.  
-배치를 8개씩 60번 읽어 그래디언트를 쌓으면, 한 번에 480개를 읽는 것과 수학적으로 동일한 효과를 냅니다.  
-마치 장바구니가 작아서 마트를 여러 번 다녀오는 것처럼, 결과는 같되 한 번에 드는 부담을 나누는 방식입니다.
-
-### "bfloat16"이란?
-
-숫자를 얼마나 정밀하게 저장하느냐의 단위입니다.
-
-| 형식 | 비트 | 메모리 | 정밀도 | 비고 |
-|---|---|---|---|---|
-| float32 | 32 | 기준 | 높음 | 기본 과학 계산 |
-| float16 | 16 | 절반 | 낮음 | 수치 불안정 가능 |
-| bfloat16 | 16 | 절반 | float32와 동일한 범위 | AI 학습에 최적 |
-
-RTX 4060은 bfloat16을 하드웨어에서 직접 지원하므로, float32 대비 메모리는 절반, 속도는 2배 이상 납니다. 학습 결과의 품질 차이는 거의 없습니다.
-
-### "MFU(Model FLOPS Utilization)"란?
-
-GPU가 이론상 낼 수 있는 최대 성능 대비 실제 활용률입니다.  
-예를 들어 MFU 40%라면, GPU가 가진 연산 능력의 40%만 실제로 쓰이고 있다는 뜻입니다.  
-나머지 60%는 데이터 이동, 대기 등에 소비됩니다.  
-
-nanoGPT 수준의 단일 GPU 학습에서 MFU 30~50%는 정상 범위입니다.
-
-### 비용 관점에서의 시사점
-
-| 구분 | 내 RTX 4060 (랩탑) | 클라우드 A100 (80GB) |
+| 설정 | 변경 전 (laptop 브랜치) | 변경 후 (pc 브랜치) |
 |---|---|---|
-| 피크 성능 | 126 TFLOPS | 312 TFLOPS |
-| VRAM | 8 GB | 80 GB |
-| 비용 | (이미 보유) | 약 $3~4/시간 |
-| GPT-2 Small 학습 시간 (OpenWebText) | 수일 | 수 시간 |
-| 적합한 용도 | 실험, 소규모 파인튜닝 | 본격 사전학습 |
+| `batch_size` | `8` (주석: RTX 4060 Laptop) | `8` (주석: RTX 2070 Desktop) |
+| `dtype` | `'bfloat16' if ... else 'float16'` (자동 감지) | `'float16'` (고정) |
 
-현재 환경은 **알고리즘 이해, 소규모 실험, 파인튜닝 연구**에 충분합니다.  
-실제 서비스 수준의 모델 학습이 목표라면 클라우드 GPU 비용을 별도 산정해야 합니다.
+```python
+# Line 49
+batch_size = 8 # RTX 2070 Desktop 8GB VRAM: micro-batch 8 (effective batch = 60*8 = 480, same as original)
+
+# Line 73
+dtype = 'float16' # RTX 2070 (Turing, CC 7.5) → float16이 최적. 'float32', 'bfloat16', 'float16' 중 선택 가능
+```
+
+### 2. `model.py` (모델 정의)
+
+| 설정 | 변경 전 | 변경 후 |
+|---|---|---|
+| `estimate_mfu()` docstring | RTX 4060 Laptop bfloat16 | RTX 2070 Desktop float16 |
+| `flops_promised` | `126e12` (126 TFLOPS) | `60e12` (~60 TFLOPS) |
+
+```python
+# Line 290
+""" estimate model flops utilization (MFU) in units of RTX 2070 Desktop float16 peak FLOPS """
+
+# Line 299-301
+# express our flops throughput as ratio of RTX 2070 Desktop float16 peak flops
+flops_achieved = flops_per_iter * (1.0/dt) # per second
+flops_promised = 60e12 # RTX 2070 Desktop GPU float16 Tensor Core peak flops is ~60 TFLOPS
+```
+
+### 3. `bench.py` (벤치마크 스크립트)
+
+| 설정 | 변경 전 | 변경 후 |
+|---|---|---|
+| `batch_size` | `12` | `8` |
+| `dtype` | `'bfloat16' if ... else 'float16'` (자동 감지) | `'float16'` (고정) |
+
+```python
+# Line 12
+batch_size = 8 # RTX 2070 Desktop 8GB VRAM 기준
+
+# Line 18
+dtype = 'float16' # RTX 2070 (Turing, CC 7.5) → float16이 최적
+```
+
+### 4. `sample.py` (추론 스크립트)
+
+| 설정 | 변경 전 | 변경 후 |
+|---|---|---|
+| `dtype` | `'bfloat16' if ... else 'float16'` (자동 감지) | `'float16'` (고정) |
+
+```python
+# Line 21
+dtype = 'float16' # RTX 2070 (Turing, CC 7.5) → float16이 최적
+```
+
+### 5. `config/` (설정 파일들) — 변경 없음
+
+아래 config 파일들은 `train.py`의 기본값을 오버라이드하는 용도이며, GPU 종속적인 설정(`dtype`, `flops_promised`)을 직접 지정하지 않으므로 수정하지 않았습니다.
+
+- `config/train_gpt2.py` — `batch_size=12`는 8x A100 기준 주석이므로 그대로 유지
+- `config/train_shakespeare_char.py` — 소형 모델(6레이어), 메모리 부담 없음
+- `config/finetune_shakespeare.py` — `batch_size=1`로 이미 보수적
+- `config/eval_gpt2*.py` — `batch_size=8`로 동일
+
+---
+
+## 설정값 변경 근거
+
+### dtype: bfloat16 자동 감지 → float16 고정
+
+| 아키텍처 | bfloat16 하드웨어 지원 | 권장 dtype |
+|---|---|---|
+| Turing (RTX 20xx, CC 7.5) | ❌ 미지원 | **float16** |
+| Ampere (RTX 30xx, CC 8.0+) | ✅ 지원 | bfloat16 |
+| Ada Lovelace (RTX 40xx, CC 8.9) | ✅ 지원 | bfloat16 |
+
+- RTX 2070은 Turing 아키텍처로, bfloat16 연산을 하드웨어적으로 지원하지 않습니다.
+- `torch.cuda.is_bf16_supported()`는 환경에 따라 True를 반환할 수 있으나, 실제로는 소프트웨어 에뮬레이션이므로 속도가 크게 저하됩니다.
+- **float16 + GradScaler**가 RTX 2070에서 최적의 성능을 발휘합니다.
+
+### flops_promised: 126e12 → 60e12
+
+| GPU | FP16 Tensor Core 피크 | 출처 |
+|---|---|---|
+| RTX 2070 | ~60 TFLOPS | NVIDIA 공식 사양 |
+| RTX 4060 Laptop | 126 TFLOPS | NVIDIA 공식 사양 |
+| A100 (80GB) | 312 TFLOPS | NVIDIA 공식 사양 |
+
+이 값은 `estimate_mfu()` 함수에서 GPU 활용률(MFU)을 계산하는 기준값입니다. GPU 모델에 맞게 설정해야 MFU 수치가 의미 있는 값이 됩니다.
+
+### batch_size: bench.py만 12 → 8 변경
+
+- `train.py`는 이미 laptop 브랜치에서 8로 설정되어 있었으므로 주석만 변경
+- `bench.py`는 원본 기준(12)으로 남아 있어 8GB VRAM에서 OOM 위험이 있으므로 8로 변경
+
+---
+
+## 브랜치별 설정 비교
+
+| 설정 | laptop 브랜치 (RTX 4060 Laptop) | pc 브랜치 (RTX 2070 Desktop) |
+|---|---|---|
+| GPU | RTX 4060 Laptop | RTX 2070 Desktop |
+| VRAM | 8 GB | 8 GB |
+| dtype | bfloat16 (자동 감지) | **float16 (고정)** |
+| flops_promised | 126e12 | **60e12** |
+| batch_size (train.py) | 8 | 8 |
+| batch_size (bench.py) | 12 | **8** |
+| compile | True | True |
+
+---
+
+## 참고: 다른 환경으로 전환 시
+
+다른 GPU 환경에서 이 코드를 사용할 때 수정해야 할 항목:
+
+1. **dtype** (`train.py`, `sample.py`, `bench.py`) — Ampere 이상이면 `'bfloat16'`으로 변경
+2. **flops_promised** (`model.py:301`) — 해당 GPU의 FP16/BF16 피크 TFLOPS 값으로 변경
+3. **batch_size** (`train.py`, `bench.py`) — VRAM 용량에 따라 조절
