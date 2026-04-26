@@ -1,7 +1,7 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
-*$py.class
+*\.class
 
 # IDEs
 .DS_Store
@@ -17,12 +17,15 @@ ENV/
 
 # Model Checkpoints and Output
 out/
+out-*/
 *.pt
 
 # Data files (binaries and large text)
 *.bin
 *.pkl
-input.txt
+
+# Allow our specific agent dataset source
+!data/agent/input.txt
 
 # Logs
 *.log
