@@ -287,7 +287,7 @@ class GPT(nn.Module):
         return optimizer
 
     def estimate_mfu(self, fwdbwd_per_iter, dt):
-        """ estimate model flops utilization (MFU) in units of RTX 4060 Laptop bfloat16 peak FLOPS """
+        """ estimate model flops utilization (MFU) in units of RTX 2070 Desktop float16 peak FLOPS """
         # first estimate the number of flops we do per iteration.
         # see PaLM paper Appendix B as ref: https://arxiv.org/abs/2204.02311
         N = self.get_num_params()
@@ -296,9 +296,9 @@ class GPT(nn.Module):
         flops_per_token = 6*N + 12*L*H*Q*T
         flops_per_fwdbwd = flops_per_token * T
         flops_per_iter = flops_per_fwdbwd * fwdbwd_per_iter
-        # express our flops throughput as ratio of RTX 4060 Laptop bfloat16 peak flops
+        # express our flops throughput as ratio of RTX 2070 Desktop float16 peak flops
         flops_achieved = flops_per_iter * (1.0/dt) # per second
-        flops_promised = 126e12 # RTX 4060 Laptop GPU bfloat16 peak flops is 126 TFLOPS
+        flops_promised = 60e12 # RTX 2070 Desktop GPU float16 Tensor Core peak flops is ~60 TFLOPS
         mfu = flops_achieved / flops_promised
         return mfu
 

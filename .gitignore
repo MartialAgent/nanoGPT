@@ -1,12 +1,28 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDEs
 .DS_Store
 .idea
-.ipynb_checkpoints/
 .vscode
-__pycache__/
+.ipynb_checkpoints/
+
+# Virtual Environments
+.venv/
+venv/
+env/
+ENV/
+
+# Model Checkpoints and Output
+out/
+*.pt
+
+# Data files (binaries and large text)
 *.bin
 *.pkl
-*.pt
-*.pyc
 input.txt
-env/
-venv/
+
+# Logs
+*.log
