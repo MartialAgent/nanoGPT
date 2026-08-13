@@ -260,8 +260,14 @@ python sample.py --out_dir=out-shakespeare-char > result.txt   # 저장은 직�
 
 ### git에 올라가는 것
 
-`.gitignore`가 산출물을 전부 제외한다 (`*.bin`, `*.pt`, `*.pkl`, `out-*/`, `.venv/`).
-단 **`data/agent/input.txt`는 예외로 추적**한다 — 원본 데이터라 없으면 재현이 불가능하다.
+`.gitignore`가 **산출물**을 제외한다 (`*.bin`, `*.pt`, `*.pkl`, `out-*/`, `.venv/`).
+**원본 텍스트인 `data/*/input.txt`는 추적한다.**
+
+| | git | 이유 |
+|---|---|---|
+| `input.txt` | ✓ 추적 | 원본. 재생성이 외부 URL에 의존 |
+| `train.bin` / `val.bin` / `meta.pkl` | ✗ 제외 | `prepare.py`로 재생성 |
+| `ckpt.pt` | ✗ 제외 | 학습으로 재생성 (129MB) |
 
 > **원칙: 재생성 가능한 것은 올리지 않는다.** `input.txt`와 코드만 있으면
 > 명령 두 번으로 나머지를 전부 복구할 수 있다.
@@ -269,6 +275,15 @@ python sample.py --out_dir=out-shakespeare-char > result.txt   # 저장은 직�
 > python data/agent/prepare.py
 > python train.py config/finetune_agent.py
 > ```
+
+`input.txt`가 예외인 이유는 이 원칙의 전제가 성립하지 않기 때문이다. `.bin`은 `input.txt`만
+있으면 언제든 만들 수 있지만, `input.txt` 자체의 재생성은 **외부 URL에 의존**한다
+(`shakespeare_char`는 2015년 저장소인 `karpathy/char-rnn`). 그 URL이 사라지면 복구 경로가 없고,
+이 문서의 실측치를 대조할 대상도 함께 사라진다.
+
+> `.gitignore`에 있던 `!data/agent/input.txt`는 실제로는 아무 동작도 하지 않는 줄이었다.
+> `*.bin`·`*.pkl`은 `.txt`를 매칭하지 않으므로 `input.txt`는 애초에 무시된 적이 없고,
+> 무시되지 않은 것을 negation으로 되살릴 수는 없다. `git check-ignore -v`로 확인할 수 있다.
 
 ---
 
