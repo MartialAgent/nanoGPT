@@ -256,9 +256,14 @@ nvidia-smi --query-gpu=utilization.gpu,memory.used,temperature.gpu --format=csv 
 ### 6. 대화
 
 ```bash
-python chat.py                                    # out-agent-ft/ckpt.pt 로드
-python chat.py --out_dir=out-shakespeare-char     # 다른 체크포인트
+python chat.py     # out-agent-ft/ckpt.pt 를 로드 (경로 고정)
 ```
+
+> `chat.py`는 `configurator.py`를 호출하지 않으므로 **명령줄 인자를 받지 않습니다.**
+> `--out_dir=...`을 붙여도 무시되고 `chat.py:7`의 `out-agent-ft`를 그대로 씁니다.
+> 또한 `chat.py:35`가 `tiktoken.get_encoding("gpt2")`로 고정돼 있어 **GPT-2 계열 모델 전용**입니다.
+> 문자 단위 모델(`shakespeare_char`, vocab 65)에 물리면 토큰 ID가 임베딩 범위를 벗어나 실패합니다.
+> 다른 체크포인트를 쓰려면 `chat.py`를 직접 수정해야 합니다.
 
 `exit` 입력 시 종료됩니다. `data/agent/prepare.py` → `train.py config/finetune_agent.py`를 마쳐야 `out-agent-ft/ckpt.pt`가 생성됩니다.
 
