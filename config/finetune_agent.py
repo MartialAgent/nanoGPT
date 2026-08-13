@@ -1,6 +1,6 @@
 import time
 
-# AI Agent Expert Finetuning Config (RTX 2070 Optimized)
+# AI Agent Expert Finetuning Config (RTX 4060 Laptop Optimized)
 out_dir = 'out-agent-ft'
 eval_interval = 20
 eval_iters = 40
@@ -13,7 +13,7 @@ init_from = 'gpt2' # 124M model
 
 # Hardware Settings
 device = 'cuda'
-dtype = 'float16'
+dtype = 'bfloat16'
 compile = False
 
 # Training Settings

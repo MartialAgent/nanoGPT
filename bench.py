@@ -9,13 +9,13 @@ import torch
 from model import GPTConfig, GPT
 
 # -----------------------------------------------------------------------------
-batch_size = 8 # RTX 2070 Desktop 8GB VRAM 기준
+batch_size = 8 # RTX 4060 Laptop 8GB VRAM 기준
 block_size = 1024
 bias = False
 real_data = True
 seed = 1337
 device = 'cuda' # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1', etc.
-dtype = 'float16' # RTX 2070 (Turing, CC 7.5) → float16이 최적. 'float32' or 'bfloat16' or 'float16'
+dtype = 'bfloat16' if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else 'float16' # RTX 4060 Laptop (Ada, CC 8.9) → bfloat16 자동 선택
 compile = True # use PyTorch 2.0 to compile the model to be faster
 profile = False # use pytorch profiler, or just simple benchmarking?
 exec(open('configurator.py').read()) # overrides from command line or config file

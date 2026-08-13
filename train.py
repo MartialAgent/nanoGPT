@@ -47,7 +47,7 @@ wandb_run_name = 'gpt2' # 'run' + str(time.time())
 # data
 dataset = 'openwebtext'
 gradient_accumulation_steps = 5 * 12 # used to simulate larger batch sizes
-batch_size = 8 # RTX 2070 Desktop 8GB VRAM: micro-batch 8 (effective batch = 60*8 = 480, same as original)
+batch_size = 8 # RTX 4060 Laptop 8GB VRAM: micro-batch 8 (effective batch = 60*8 = 480, same as original)
 block_size = 1024
 # model
 n_layer = 12
@@ -71,7 +71,7 @@ min_lr = 6e-5 # minimum learning rate, should be ~= learning_rate/10 per Chinchi
 backend = 'nccl' # 'nccl', 'gloo', etc.
 # system
 device = 'cuda' # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1' etc., or try 'mps' on macbooks
-dtype = 'float16' # RTX 2070 (Turing, CC 7.5) → float16이 최적. 'float32', 'bfloat16', 'float16' 중 선택 가능
+dtype = 'bfloat16' if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else 'float16' # RTX 4060 Laptop (Ada, CC 8.9) → bfloat16 자동 선택, GradScaler 불필요
 compile = True # use PyTorch 2.0 to compile the model to be faster
 # -----------------------------------------------------------------------------
 config_keys = [k for k,v in globals().items() if not k.startswith('_') and isinstance(v, (int, float, bool, str))]

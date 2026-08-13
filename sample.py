@@ -18,7 +18,7 @@ temperature = 0.8 # 1.0 = no change, < 1.0 = less random, > 1.0 = more random, i
 top_k = 200 # retain only the top_k most likely tokens, clamp others to have 0 probability
 seed = 1337
 device = 'cuda' # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1', etc.
-dtype = 'float16' # RTX 2070 (Turing, CC 7.5) → float16이 최적. 'float32' or 'bfloat16' or 'float16'
+dtype = 'bfloat16' if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else 'float16' # RTX 4060 Laptop (Ada, CC 8.9) → bfloat16 자동 선택
 compile = False # use PyTorch 2.0 to compile the model to be faster
 exec(open('configurator.py').read()) # overrides from command line or config file
 # -----------------------------------------------------------------------------
