@@ -19,6 +19,63 @@ GPT는 **한 번에 토큰 하나씩** 생성합니다.
 
 이를 **자동회귀(autoregressive)** 생성이라 합니다: 이전 출력이 다음 입력이 됩니다.
 
+### 첫 토큰은 반드시 주어져야 한다
+
+모델은 입력이 있어야 다음 토큰의 확률 분포를 계산할 수 있습니다. 완전한 무에서는 시작할 수 없으므로
+`start`가 그 **씨앗** 역할을 합니다. 사용자가 프롬프트를 주면 그것이 씨앗이고, 주지 않으면
+기본값인 개행 문자 하나(`'\n'`)가 들어갑니다.
+
+즉 아래 두 명령은 같습니다.
+
+```bash
+python sample.py --out_dir=out-shakespeare-char
+python sample.py --out_dir=out-shakespeare-char --start="\n"
+```
+
+개행 하나만 받아도 그럴듯한 출력이 나오는 이유는, 셰익스피어 원문이 `이름:\n대사` 형식이라
+모델이 "개행 다음엔 등장인물 이름이 온다"는 패턴을 학습했기 때문입니다. 실제 출력도
+`Clown:` 같은 이름으로 시작합니다 — 그 뒤 전부가 모델이 스스로 만든 것입니다.
+
+### 명령어에 아무것도 안 줬을 때 실제로 들어가는 값
+
+```bash
+python sample.py --out_dir=out-shakespeare-char --num_samples=2 --max_new_tokens=250
+```
+
+`--start`가 없지만 입력은 존재합니다. `sample.py` 안의 기본값이 그대로 쓰이기 때문입니다.
+
+```python
+start = "\n"                                    # sample.py:14  ← 여기서 결정
+...
+start_ids = encode(start)                       # sample.py:80
+x = torch.tensor(start_ids, ...)[None, ...]     # sample.py:81
+y = model.generate(x, max_new_tokens, ...)      # sample.py:87
+```
+
+`encode`는 체크포인트에 기록된 `dataset` 이름으로 `meta.pkl`을 찾아 결정됩니다 (`sample.py:58-68`).
+
+```python
+encode = lambda s: [stoi[c] for c in s]         # 문자 단위 (meta.pkl 있음)
+```
+
+`meta.pkl`의 `stoi`에서 `'\n'`은 **0번**입니다. 따라서 최종적으로 모델에 들어가는 값은 이것뿐입니다.
+
+```
+start      "\n"
+  ↓ encode
+start_ids  [0]
+  ↓ tensor
+x          shape (1, 1)   ← 토큰 단 1개
+  ↓ generate(250)
+y          shape (1, 251) ← 250개를 이어붙임
+```
+
+**토큰 하나로 시작해 250개를 스스로 만든 것**입니다. `--start="ROMEO:"`를 주면 `[30, 27, 25, 17, 27, 10]`
+처럼 6개 토큰으로 시작할 뿐, 이후 과정은 동일합니다.
+
+> `meta.pkl`이 없는 GPT-2 계열 모델이면 `else` 분기로 가서 `tiktoken`의 BPE 인코더를 씁니다
+> (`sample.py:69-74`). 같은 `sample.py`가 두 방식을 모두 처리합니다.
+
 ---
 
 ## sample.py 실행 방법

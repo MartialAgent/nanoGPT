@@ -433,6 +433,206 @@ itos = { i:ch for i,ch in enumerate(chars) }   # 18 → 'F'
 
 ---
 
+## Q12. 여기서 말하는 GPT는 ChatGPT인가?
+
+**아니다. GPT는 제품이 아니라 구조와 학습 전략의 이름이다.**
+
+```
+Generative     생성하는
+Pre-trained    미리 학습된
+Transformer    트랜스포머
+```
+
+**"Pre-trained"는 아키텍처가 아니라 방법론을 가리킨다.** 구조 자체는 decoder-only 트랜스포머일
+뿐이고, "먼저 대량의 텍스트로 학습시켜 놓고 나중에 용도별로 다듬는다"는 전략까지 포함한 이름이다.
+`Pre`가 붙었다는 것은 **뒤에 무언가 더 올 것을 전제**한다는 뜻이다.
+
+이 저장소의 두 실험이 정확히 그 두 단계다.
+
+| 단계 | 내용 | 이 저장소 |
+|---|---|---|
+| **P**re-training | 난수에서 시작, 언어 자체를 습득 | `train_shakespeare_char.py` |
+| Fine-tuning | 학습된 가중치에 특정 도메인을 얹음 | `finetune_agent.py` |
+
+ChatGPT는 그 위에 두 층이 더 쌓인 **제품**이다.
+
+```
+GPT 사전학습 → instruction tuning → RLHF → 서비스 계층(안전 필터·세션·UI)
+   ↑ nanoGPT는 여기까지
+```
+
+정리하면 `model.py`는 **구조 정의**, `train.py`는 **그 구조를 GPT 방식으로 학습시키는 절차**,
+산출물 `ckpt.pt`가 **학습된 모델**이다.
+
+---
+
+## Q13. 셰익스피어 모델도 GPT-2 가중치를 받아서 쓰나?
+
+**아니다. 난수에서 시작했다. 다운로드는 없었다.**
+
+```
+Initializing a new model from scratch
+number of parameters: 10.65M          ← GPT-2는 124M
+```
+
+`train_shakespeare_char.py`는 `init_from`이 기본값 `'scratch'`다. 영어 문법도 단어도 모르는
+빈 모델이 셰익스피어 1MB만 보고 글자 조합 패턴을 익힌 것이다. `"The tractor and ten will my father"`
+같은 출력이 나오는 이유가 이것이다.
+
+GPT-2 가중치 다운로드(~500MB)는 `init_from='gpt2'`인 파인튜닝 설정에서만 일어난다.
+
+| | 셰익스피어 | agent |
+|---|---|---|
+| 출발점 | **난수 (scratch)** | GPT-2 124M 공개 가중치 |
+| 다운로드 | 없음 | ~500MB (`~/.cache/huggingface/`) |
+| 아는 것 | 셰익스피어 철자 패턴뿐 | 영어 문법·상식 |
+
+---
+
+## Q14. 셰익스피어 말투는 코드에 하드코딩된 것인가?
+
+**아니다. 코드에 셰익스피어와 관련된 것은 한 글자도 없다.**
+
+`model.py`에는 등장인물 이름 목록도, "대사 앞에 콜론을 붙여라" 같은 규칙도, 고어체 사전도 없다.
+행렬 곱과 softmax뿐이다.
+
+| | 내용 | 어디에 |
+|---|---|---|
+| 사람이 정함 | 레이어 6개, 헤드 6개, 차원 384, 학습률 | `config/`, `model.py` |
+| 데이터가 정함 | vocab 65자와 그 구성 | `meta.pkl` (`prepare.py`가 추출) |
+| **학습이 정함** | **말투·철자·형식 전부** | `ckpt.pt`의 숫자 10,770,048개 |
+
+사람이 정한 것은 **틀**뿐이다. 무엇을 배울지는 지정하지 않았다.
+
+**근거 셋**
+
+1. **같은 코드가 전혀 다른 것을 학습한다.** `train.py`·`model.py`는 한 글자도 바뀌지 않고
+   `dataset` 문자열 하나만 달라진다 (Q6 참조). 한국어를 넣으면 한국어 패턴을 배운다
+2. **vocab 65도 하드코딩이 아니다.** `sorted(set(text))`로 원문에서 세어 만든 값이다.
+   셰익스피어에 숫자가 `'3'` 하나뿐이라 사전에도 `'3'`만 들어갔다
+3. **체크포인트에 텍스트가 없다.** 129MB 전체가 소수점이다 (부록 A 참조).
+   학습 시작 시점엔 전부 난수였다
+
+말투는 1,077만 개 숫자에 분산돼 있고, 어느 하나를 짚어 "여기가 콜론 규칙"이라고 말할 수 없다.
+
+---
+
+## Q15. 파인튜닝하면 대화가 되나?
+
+**안 된다. 파인튜닝이 바꾸는 것은 이어쓰기의 내용과 문체다.**
+
+| | 이어쓰는 방식 |
+|---|---|
+| 셰익스피어 (scratch) | 영어를 모름 → 형식만 맞는 헛소리 |
+| GPT-2 파인튜닝 | 영어를 앎 + 도메인 문체 → 말이 되는 문장 |
+
+둘 다 하는 일은 **다음 토큰 이어붙이기** 하나로 동일하다. GPT-2에서 출발하면 결과가 그럴듯해질 뿐이다.
+
+`"What is an AI agent?"`를 입력해도 모델은 답하지 않는다. 그 줄 뒤에 올 법한 텍스트를 이어쓴다.
+학습 문서에는 질문 뒤에 답변이 오는 구조가 드물고 제목·목차가 이어지는 경우가 많다.
+
+```
+What is an AI agent?
+## Getting Started
+### Installation
+```
+
+질문을 이해한 것이 아니라 "이런 줄 다음엔 이런 줄이 오더라"를 재현한 것이다.
+
+진짜 질의응답이 되려면 질문-답변 쌍으로 훈련하는 **instruction tuning**이 필요하다.
+nanoGPT에는 없다.
+
+### `chat.py`의 제약
+
+`chat.py`는 이어쓰기를 `input()` 루프로 감싸고 입력 부분을 잘라내 보여줄 뿐이다.
+대화처럼 **보이게** 만드는 껍데기다. 추가로 두 가지 제약이 있다.
+
+- `configurator.py`를 호출하지 않아 **명령줄 인자를 받지 않는다.** `--out_dir=...`은 무시되고
+  `chat.py:7`의 `out-agent-ft`를 그대로 쓴다
+- `chat.py:35`가 `tiktoken.get_encoding("gpt2")`로 고정돼 **GPT-2 계열 전용**이다.
+  문자 단위 모델(vocab 65)에 물리면 토큰 ID가 임베딩 범위를 벗어나 실패한다
+
+---
+
+## Q16. 세 데이터셋의 입력과 결과는?
+
+세 경우 모두 **유저 입력 뒤를 이어쓰는 것**이고, 달라지는 것은 출발점 가중치와 학습 데이터뿐이다.
+
+| | `shakespeare_char` | `shakespeare` | `agent` |
+|---|---|---|---|
+| 원본 데이터 | 셰익스피어 희곡 1.1MB | 같은 희곡 | AutoGPT 문서 1.1MB |
+| 토큰화 | 문자 단위 | BPE | BPE |
+| `vocab_size` | 65 | 50,257 | 50,257 |
+| 출발점 | 난수 (scratch) | GPT-2 XL 1.5B | GPT-2 124M |
+| `meta.pkl` | ✓ 생성 | ✗ | ✗ |
+| 설정 파일 | `train_shakespeare_char.py` | `finetune_shakespeare.py` | `finetune_agent.py` |
+| 실행 방식 | `sample.py --start` | `sample.py --start` | `chat.py` |
+| 나오는 것 | 형식만 맞는 헛소리 | 말이 되는 셰익스피어풍 | 기술문서 문체 이어쓰기 |
+
+### 차이는 두 축으로 환원된다
+
+**① 출발점** — 난수냐, 사전학습된 가중치냐. **출력 품질**을 가른다.
+`shakespeare_char`와 `shakespeare`는 데이터가 같은데 결과가 갈리므로, 사전학습의 유무가
+무엇을 바꾸는지 직접 비교할 수 있다.
+
+**② 토큰화** — 문자 단위냐 BPE냐. **모델 크기**를 결정한다. `meta.pkl` 유무가 여기서 갈린다
+(Q10 참조).
+
+```
+meta.pkl 있음 → vocab 65     → 출력층 (65,384)     → 10.65M 모델
+meta.pkl 없음 → vocab 50,304 → 출력층 (50304,768)  → 124M 모델
+```
+
+코드(`train.py`, `model.py`)는 세 경우 모두 **한 글자도 다르지 않다.** 설정 파일 하나만 바뀐다.
+
+### `shakespeare_char` — 실측
+
+```bash
+python sample.py --out_dir=out-shakespeare-char        # start 기본값 "\n"
+```
+
+```
+Clown:
+So, who is he so fear me? what was the army to my country?
+Lord Marshal:
+The tractor and ten will my father, when my father
+Make it of me and now in a grief,--
+```
+
+형식(이름·콜론·줄바꿈·고어체)은 배웠으나 내용은 무의미하다. 셰익스피어에 트랙터는 나오지 않는다.
+
+### `shakespeare` — 예상
+
+같은 원문이지만 BPE로 자르고 `init_from='gpt2-xl'`이다. 이미 영어를 아는 1.5B 모델에
+문체만 얹으므로 문장이 실제로 말이 된다.
+
+```
+ROMEO:
+I would not lose thee for the world, sweet love;
+```
+
+같은 데이터인데 결과가 갈리는 이유는 **출발점**이다.
+
+> `gpt2-xl`(1.5B)은 8GB VRAM에서 OOM 가능성이 높다. `--init_from=gpt2`로 낮춰야 할 수 있다.
+
+### `agent` — 예상
+
+```
+User: What is an AI agent?
+AI Expert: ## Getting Started
+           ### Installation
+```
+
+문서 이어쓰기 형태로 넣으면 더 자연스럽다.
+
+```
+User: An AI agent is
+AI Expert:  a system that can autonomously execute tasks by breaking
+            down a goal into subtasks and calling external tools.
+```
+
+---
+
 ## 부록 A. 실제 파일 내부 (셰익스피어 기준 실측)
 
 ### `input.txt`
@@ -546,6 +746,37 @@ _orig_mod.lm_head.weight                      (65, 384)     ← 출력층
 ---
 
 ## 부록 B. 문자 단위 vs BPE — 같은 문장을 쪼개보면
+
+### BPE란
+
+**Byte Pair Encoding** (바이트 쌍 인코딩). 이름 그대로 **가장 자주 붙어 나오는 쌍(pair)을
+하나로 합치는** 작업을 반복해 사전을 만드는 알고리즘이다.
+
+```
+시작:   l o w   l o w e r   l o w e s t
+        ↓ 'l'+'o' 가 가장 빈번 → 병합
+1회:    lo w    lo w e r    lo w e s t
+        ↓ 'lo'+'w' 가 가장 빈번 → 병합
+2회:    low     low e r     low e s t
+        ↓ 반복
+결과:   low, er, est ... 가 사전에 등록됨
+```
+
+GPT-2는 이 병합을 사전 크기가 50,257이 될 때까지 돌린 결과를 쓴다. 그래서 흔한 단어는 통째로
+1토큰이 되고, 드문 단어는 조각으로 남는다.
+
+**"Byte"인 이유**: 원래 BPE는 1994년에 나온 데이터 압축 알고리즘이었고 문자 단위로 동작했다.
+GPT-2는 이를 **바이트 단위**로 바꿔 적용했다. 유니코드 문자는 수십만 개라 전부 사전에 넣을 수 없지만
+바이트는 256가지뿐이고, 모든 텍스트는 바이트로 표현된다. 따라서 사전에 없는 문자가 들어와도
+최소한 바이트 단위로는 쪼갤 수 있어 **처리 불가능한 입력이 존재하지 않는다.**
+한글·이모지·중국어도 GPT-2 토크나이저가 처리할 수 있는 이유다.
+
+대신 사전에 없는 문자는 토큰을 많이 소모한다. 한글은 글자당 3바이트라 영어보다 훨씬 비효율적이다.
+
+이 저장소는 `tiktoken` 라이브러리로 GPT-2의 BPE 사전을 그대로 불러다 쓴다
+(`data/shakespeare/prepare.py`, `data/agent/prepare.py`, `sample.py`).
+
+### 실측 비교
 
 `agent/input.txt` 앞부분을 GPT-2 BPE로 토큰화한 실측 결과:
 
