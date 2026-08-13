@@ -159,35 +159,9 @@ data/agent/prepare.py  →  config/finetune_agent.py  →  chat.py
 
 ### 5. 알려진 버그 — 원본에는 없는 문제
 
-이 저장소의 수정 과정에서 생긴 문제들입니다. 원본 nanoGPT에는 해당하지 않습니다.
+이 저장소의 수정 과정에서 생긴 문제입니다. 원본 nanoGPT에는 해당하지 않습니다.
 
-**① 진행바가 `log_interval`마다 1칸만 전진** — ✅ **수정 완료**
-
-`pbar.update(1)`이 `if iter_num % log_interval == 0` 블록 안에 있어서, `total=max_iters`인데
-`max_iters / log_interval`번만 갱신됐습니다. 세 가지가 어긋났습니다.
-
-- 진행바가 끝까지 차지 않음 — `train_shakespeare_char.py`는 `log_interval=10`, `max_iters=5000`이라
-  **정확히 10%가 상한**이었습니다. 학습을 완주해도 `500/5000 (10%)`에서 멈춘 것처럼 보여
-  "멈췄나?"로 오인하기 쉬웠습니다
-- tqdm의 `it/s`가 실제의 `1/log_interval`배 → 성능을 잘못 읽게 됨
-- ETA가 같은 배율로 부풀려짐
-
-`pbar.update(1)`을 블록 밖으로 옮겨 매 iteration 전진하도록 고쳤습니다.
-`set_postfix`(loss·mfu 표시)는 CPU-GPU 동기화 비용이 있으므로 `log_interval`마다 유지합니다.
-
-```python
-    if iter_num % log_interval == 0 and master_process:
-        lossf = loss.item() * gradient_accumulation_steps
-        ...
-        pbar.set_postfix(loss=f"{lossf:.4f}", mfu=f"{running_mfu*100:.2f}%")
-    if master_process:
-        pbar.update(1)          # ← 매 iteration
-    iter_num += 1
-```
-
-**② 도달 불가능한 `break` 중복** — ✅ **수정 완료** (①과 함께 제거, 동작 변화 없음)
-
-**③ `data/agent/prepare.py` — 셰익스피어 스크립트 복사본**
+**`data/agent/prepare.py` — 셰익스피어 스크립트 복사본**
 
 `data/shakespeare/prepare.py`를 복사해 만든 탓에 다운로드 URL이 아직 tinyshakespeare를 가리킵니다.
 `input.txt`가 이미 있으면 다운로드를 건너뛰므로 현재는 정상 동작하지만, `input.txt`가 없는 상태에서
