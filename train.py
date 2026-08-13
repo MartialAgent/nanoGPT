@@ -327,16 +327,17 @@ while True:
         if local_iter_num >= 5: # let the training loop settle a bit
             mfu = raw_model.estimate_mfu(batch_size * gradient_accumulation_steps, dt)
             running_mfu = mfu if running_mfu == -1.0 else 0.9*running_mfu + 0.1*mfu
-        if master_process:
-            pbar.set_postfix(loss=f"{lossf:.4f}", mfu=f"{running_mfu*100:.2f}%")
-            pbar.update(1)
+        pbar.set_postfix(loss=f"{lossf:.4f}", mfu=f"{running_mfu*100:.2f}%")
+    # advance the bar every iteration, not only on log_interval, so that the
+    # bar reaches 100% and its it/s and ETA reflect real per-iteration timing
+    if master_process:
+        pbar.update(1)
     iter_num += 1
     local_iter_num += 1
 
     # termination conditions
     if iter_num >= max_iters:
         if master_process: pbar.close()
-        break
         break
 
 if ddp:

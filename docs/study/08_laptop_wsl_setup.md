@@ -231,8 +231,8 @@ Training: 10%|█ | 10/100 [02:40<24:06, loss=2.4599, mfu=1.44%]
 
 - **mfu**: Model FLOPs Utilization. GPU 이론 성능(`model.py`의 `flops_promised`) 대비 실제 활용률.
   작은 모델은 GPU를 채우지 못해 낮게 나오는 것이 정상입니다
-- **`s/it`은 신뢰하지 마세요** — 아래 "진행바 s/it이 실제와 다름" 항목 참조.
-  실제 진척은 `step N: ...` 줄로 판단합니다
+- **`it/s`·ETA**: 진행바 버그 수정 후로는 실제 값입니다. `loss`·`mfu`는 `log_interval`마다만
+  갱신되므로 그 사이에는 직전 값이 그대로 표시됩니다
 
 **이상 신호**
 
@@ -330,25 +330,27 @@ A: command not found                 ← 종료 후 bash가 버퍼의 A를 명�
 **대처**: 긴 명령 실행 중에는 키를 누르지 않습니다. 위 사례는 `A`라는 명령이 없어 무해했지만,
 버퍼에 쌓인 글자가 우연히 실제 명령을 이루면 그대로 실행되므로 원리상 주의가 필요합니다.
 
-### 진행바 s/it이 실제와 다름
+### 진행바가 10%에서 멈춘 것처럼 보임 — 수정 완료
 
-`train.py:332`의 `pbar.update(1)`이 `if iter_num % log_interval == 0` 블록 안에 있습니다. 진행바가 `log_interval`마다 1칸씩만 전진하므로 다음 세 가지가 어긋납니다.
+**과거 증상**: `pbar.update(1)`이 `if iter_num % log_interval == 0` 블록 안에 있어 진행바가
+`log_interval`마다 1칸씩만 전진했습니다. `train_shakespeare_char.py`는 `log_interval = 10`,
+`max_iters = 5000`이므로 갱신 횟수가 500회뿐이고, **진행바 상한이 정확히 10%**였습니다.
 
-- 진행바가 `max_iters / log_interval`에서 종료 (100 iters 완주해도 `10/100` 표시)
-- tqdm의 `s/it`이 실제의 `log_interval`배
-- ETA가 같은 배율로 부풀려짐
-
-수정하려면 `update`만 블록 밖으로 옮깁니다.
-
-```python
-        if master_process:
-            pbar.set_postfix(loss=f"{lossf:.4f}", mfu=f"{running_mfu*100:.2f}%")
-    if master_process:
-        pbar.update(1)
-    iter_num += 1
+```
+log_interval = 10,  max_iters = 5000
+→ 갱신 500회 / total 5000 = 최대 10%
 ```
 
-`train.py:339-340`에는 도달 불가능한 `break`가 중복돼 있습니다(동작에는 무영향).
+학습이 정상 완주해도 `500/5000 (10%)`에서 멈춘 것처럼 보였습니다. 실제로 끝났는지 확인하려면
+프로세스와 체크포인트를 봐야 했습니다.
+
+```bash
+pgrep -af train.py                                   # 없으면 종료된 것
+python -c "import torch;c=torch.load('out-shakespeare-char/ckpt.pt',map_location='cpu');print(c['iter_num'])"
+```
+
+**현재**: `pbar.update(1)`을 블록 밖으로 옮겨 매 iteration 전진하도록 고쳤습니다. 진행바가 100%까지
+차고 `it/s`·ETA도 실제 값을 반영합니다. `train.py:339-340`의 중복 `break`도 함께 제거했습니다.
 
 ---
 

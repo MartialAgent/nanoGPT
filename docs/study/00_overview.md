@@ -24,6 +24,7 @@ nanoGPT는 Andrej Karpathy가 만든 GPT 언어 모델의 **최소한의 구현�
 | 07 | [사전학습과 데이터 처리](./07_pretraining_and_data.md) | 원본 텍스트 → `.bin` 변환 과정 상세 |
 | 08 | [랩톱 WSL 환경 구축](./08_laptop_wsl_setup.md) | RTX 4060 Laptop + WSL 설정과 명령어 레퍼런스 |
 | 09 | [GPU · CUDA · 텐서 기초](./09_gpu_cuda_tensor.md) | `cuda`, `tensor`, `dtype`, `torch.compile`이 뭔지 |
+| 10 | [입문 Q&A](./10_faq_basics.md) | `input.txt`·`.bin`·`meta.pkl`·`ckpt.pt`가 각각 뭔지 (실측 덤프 포함) |
 
 > 실행 환경 세팅·GPU 튜닝·실험 결과 기록은 별도로 [`docs/test/`](../test/00_system_setup.md)에 있습니다.
 
@@ -98,7 +99,7 @@ CRLF 노이즈를 제외한 실제 내용 변경입니다 (`git diff 3adf61e --i
 | `data/agent/prepare.py` ★ | 신규 33줄 | Agent 데이터 토크나이징 |
 | `data/agent/input.txt` ★ | 신규 17,001줄 | Agent 문서 데이터 |
 | `.gitignore` | 33줄 | 체크포인트·venv 제외 |
-| `docs/` ★ | 신규 13개 | 학습 자료 + 실험 기록 |
+| `docs/` ★ | 신규 14개 | 학습 자료 + 실험 기록 |
 
 `★` = 원본에 없는 신규 파일. 코드 변경은 실질적으로 `train.py`·`model.py` 두 개에 집중돼 있습니다.
 
@@ -126,7 +127,8 @@ CRLF 노이즈를 제외한 실제 내용 변경입니다 (`git diff 3adf61e --i
 
 | 항목 | 원본 | 이 저장소 |
 |------|------|----------|
-| 진행 출력 | `print(f"iter ...")` | `pbar.set_postfix(loss=..., mfu=...)` |
+| 진행 출력 | `print(f"iter ...")` | `pbar.set_postfix(loss=..., mfu=...)` (`log_interval`마다) |
+| 진행바 전진 | 해당 없음 | `pbar.update(1)` (**매 iteration**) |
 | eval / 체크포인트 로그 | `print(...)` | `tqdm.write(...)` (진행바를 깨지 않음) |
 | 종료 조건 | `if iter_num > max_iters` | `if iter_num >= max_iters` |
 
@@ -159,26 +161,31 @@ data/agent/prepare.py  →  config/finetune_agent.py  →  chat.py
 
 이 저장소의 수정 과정에서 생긴 문제들입니다. 원본 nanoGPT에는 해당하지 않습니다.
 
-**① `train.py:332` — 진행바가 `log_interval`마다 1칸만 전진**
+**① 진행바가 `log_interval`마다 1칸만 전진** — ✅ **수정 완료**
 
-`pbar.update(1)`이 `if iter_num % log_interval == 0` 블록 안에 있습니다. `total=max_iters`인데
-`max_iters / log_interval`번만 갱신되므로 세 가지가 어긋납니다.
+`pbar.update(1)`이 `if iter_num % log_interval == 0` 블록 안에 있어서, `total=max_iters`인데
+`max_iters / log_interval`번만 갱신됐습니다. 세 가지가 어긋났습니다.
 
-- 진행바가 끝까지 차지 않음 (100 iters 완주해도 `10/100` 표시)
-- tqdm의 `s/it`이 **실제의 `log_interval`배** → 성능을 잘못 읽게 됨
+- 진행바가 끝까지 차지 않음 — `train_shakespeare_char.py`는 `log_interval=10`, `max_iters=5000`이라
+  **정확히 10%가 상한**이었습니다. 학습을 완주해도 `500/5000 (10%)`에서 멈춘 것처럼 보여
+  "멈췄나?"로 오인하기 쉬웠습니다
+- tqdm의 `it/s`가 실제의 `1/log_interval`배 → 성능을 잘못 읽게 됨
 - ETA가 같은 배율로 부풀려짐
 
-수정하려면 `update`만 블록 밖으로 옮깁니다.
+`pbar.update(1)`을 블록 밖으로 옮겨 매 iteration 전진하도록 고쳤습니다.
+`set_postfix`(loss·mfu 표시)는 CPU-GPU 동기화 비용이 있으므로 `log_interval`마다 유지합니다.
 
 ```python
-        if master_process:
-            pbar.set_postfix(loss=f"{lossf:.4f}", mfu=f"{running_mfu*100:.2f}%")
+    if iter_num % log_interval == 0 and master_process:
+        lossf = loss.item() * gradient_accumulation_steps
+        ...
+        pbar.set_postfix(loss=f"{lossf:.4f}", mfu=f"{running_mfu*100:.2f}%")
     if master_process:
-        pbar.update(1)
+        pbar.update(1)          # ← 매 iteration
     iter_num += 1
 ```
 
-**② `train.py:339-340` — 도달 불가능한 `break` 중복** (동작 무영향)
+**② 도달 불가능한 `break` 중복** — ✅ **수정 완료** (①과 함께 제거, 동작 변화 없음)
 
 **③ `data/agent/prepare.py` — 셰익스피어 스크립트 복사본**
 
