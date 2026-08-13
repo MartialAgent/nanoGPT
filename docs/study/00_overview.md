@@ -22,6 +22,7 @@ nanoGPT는 Andrej Karpathy가 만든 GPT 언어 모델의 **최소한의 구현�
 | 05 | [추론과 텍스트 생성](./05_inference.md) | 학습된 모델로 글 생성하기 |
 | 06 | [실습 가이드](./06_hands_on.md) | 직접 실행해보는 단계별 실습 |
 | 07 | [사전학습과 데이터 처리](./07_pretraining_and_data.md) | 원본 텍스트 → `.bin` 변환 과정 상세 |
+| 08 | [랩톱 WSL 환경 구축](./08_laptop_wsl_setup.md) | RTX 4060 Laptop + WSL 설정과 명령어 레퍼런스 |
 
 > 실행 환경 세팅·GPU 튜닝·실험 결과 기록은 별도로 [`docs/test/`](../test/00_system_setup.md)에 있습니다.
 
@@ -79,25 +80,57 @@ nanoGPT/
 업스트림 커밋 `3adf61e` 위에 아래 변경이 얹혀 있습니다.
 **학습 문서를 읽을 때 원본 코드와 다른 부분이므로 미리 알아둘 것.**
 
+> 이 절은 변경이 생길 때마다 갱신하는 **살아있는 기록**입니다. 갱신 방법은 맨 아래 "차이 목록 갱신하기" 참조.
+
+### 0. 변경된 파일 요약
+
+CRLF 노이즈를 제외한 실제 내용 변경입니다 (`git diff 3adf61e --ignore-cr-at-eol --stat`).
+
+| 파일 | 변경량 | 성격 |
+|------|--------|------|
+| `train.py` | 21줄 | tqdm 진행바, 배치 조정, 종료 조건 |
+| `model.py` | 6줄 | `estimate_mfu()` 기준 GPU 변경 |
+| `bench.py` | 4줄 | 배치 조정, 주석 |
+| `sample.py` | 2줄 | 주석만 |
+| `chat.py` ★ | 신규 57줄 | 대화형 REPL |
+| `config/finetune_agent.py` ★ | 신규 27줄 | Agent 파인튜닝 설정 |
+| `data/agent/prepare.py` ★ | 신규 33줄 | Agent 데이터 토크나이징 |
+| `data/agent/input.txt` ★ | 신규 17,001줄 | Agent 문서 데이터 |
+| `.gitignore` | 33줄 | 체크포인트·venv 제외 |
+| `docs/` ★ | 신규 13개 | 학습 자료 + 실험 기록 |
+
+`★` = 원본에 없는 신규 파일. 코드 변경은 실질적으로 `train.py`·`model.py` 두 개에 집중돼 있습니다.
+
 ### 1. GPU 하드웨어에 맞춘 튜닝
 
-원본은 A100(bfloat16) 기준으로 값을 자동 감지하지만, 이 저장소는 로컬 GPU 값으로 고정했습니다.
+| 위치 | 원본 nanoGPT | 이 저장소 (`laptop-wsl`) | 기능 차이 |
+|------|-------------|------------------------|----------|
+| `train.py` 배치 | `batch_size=12`, `grad_accum=5*8` | `batch_size=8`, `grad_accum=5*12` | 8GB VRAM 대응. 실효 배치는 480으로 **동일** |
+| `bench.py` 배치 | `batch_size=12` | `batch_size=8` | 8GB VRAM 대응 |
+| `model.py` `estimate_mfu()` | `flops_promised = 312e12` (A100) | `126e12` (RTX 4060 Laptop bf16) | **있음** — MFU 분모가 바뀜 |
+| `train.py`/`sample.py`/`bench.py` dtype | bf16 지원 시 bf16, 아니면 fp16 (자동 감지) | 동일한 자동 감지 식 | **없음** — 주석만 다름 |
 
-| 위치 | 원본 nanoGPT | 이 저장소 |
-|------|-------------|----------|
-| `train.py` / `sample.py` / `bench.py` | `dtype = bf16 지원시 bf16, 아니면 fp16` | `dtype = 'bfloat16'` 고정 |
-| `train.py` 배치 | `batch_size=12`, `grad_accum=5*8` | `batch_size=8`, `grad_accum=5*12`<br>(8GB VRAM 대응, 실효 배치 480은 동일) |
-| `model.py` `estimate_mfu()` | `flops_promised = 312e12` (A100) | `126e12` (RTX 4060 Laptop bf16) |
+> **dtype에 대한 오해 주의**: 원본 nanoGPT는 이미 `torch.cuda.is_bf16_supported()`로 자동 감지합니다.
+> `laptop-wsl` 브랜치는 이 원본 동작을 그대로 쓰며 주석만 하드웨어에 맞게 고쳤습니다.
+> 반면 **`pc` 브랜치는 `dtype = 'float16'`으로 고정**했는데, 이는 RTX 2070(Turing, CC 7.5)이
+> bfloat16을 하드웨어 지원하지 않기 때문입니다. 브랜치별로 이 값이 다르다는 점에 유의하세요.
 
-> **MFU 수치 해석 주의**: 분모가 A100이 아니라 로컬 GPU 성능으로 바뀌었기 때문에,
-> 여기서 찍히는 MFU % 는 원본 README에 나오는 수치와 직접 비교할 수 없습니다.
+> **MFU 수치 해석 주의**: 분모가 A100(312 TFLOPS)이 아니라 로컬 GPU 성능으로 바뀌었기 때문에,
+> 여기서 찍히는 MFU % 는 원본 README의 수치와 직접 비교할 수 없습니다.
+> 브랜치별 값: `laptop-wsl` = `126e12`, `pc` = `60e12`, 원본 = `312e12`.
 
 ### 2. 학습 루프에 진행바 추가 (`train.py`)
 
-- `tqdm` 진행바를 도입해 iteration마다 loss/MFU를 `set_postfix`로 표시
-- eval 결과와 체크포인트 저장 로그는 진행바를 깨지 않도록 `tqdm.write` 사용
-- 종료 조건이 `iter_num > max_iters` → `iter_num >= max_iters` 로 변경 (총 iteration 1회 감소)
-- `tqdm` 의존성이 추가되었으나 requirements에는 미반영 → 별도 `pip install tqdm` 필요
+원본은 iteration마다 `print(f"iter {iter_num}: loss ...")`로 한 줄씩 출력합니다. 이를 tqdm 진행바로 대체했습니다.
+
+| 항목 | 원본 | 이 저장소 |
+|------|------|----------|
+| 진행 출력 | `print(f"iter ...")` | `pbar.set_postfix(loss=..., mfu=...)` |
+| eval / 체크포인트 로그 | `print(...)` | `tqdm.write(...)` (진행바를 깨지 않음) |
+| 종료 조건 | `if iter_num > max_iters` | `if iter_num >= max_iters` |
+
+- `from tqdm import tqdm` 의존성이 추가되었으나 원본 README의 설치 목록에는 없습니다 → `pip install tqdm` 별도 필요
+- 종료 조건 변경으로 총 iteration이 **1회 감소**합니다 (원본은 `max_iters + 1`회 실행)
 
 ### 3. AI Agent 파인튜닝 실험 추가
 
@@ -108,21 +141,67 @@ data/agent/prepare.py  →  config/finetune_agent.py  →  chat.py
  (문서 → 토큰)              (GPT-2 124M 파인튜닝)        (대화형 추론)
 ```
 
-- 데이터: AutoGPT 등 AI 에이전트 관련 영문 문서 약 17,000줄
-- 설정: `init_from='gpt2'`, `learning_rate=3e-5`, `decay_lr=False`, `max_iters=500`
+- 데이터: AI 에이전트 관련 영문 문서 약 17,000줄
+- 설정: `init_from='gpt2'`, `learning_rate=3e-5`, `decay_lr=False`, `max_iters=500`, `batch_size=4`, `grad_accum=8`
+- `chat.py`: 체크포인트를 로드해 `input()` 루프로 대화. `_orig_mod.` 접두사(torch.compile 흔적)를 제거하는 처리가 들어 있음
 - 결과 기록: [`docs/test/04_gpt2_finetuning_experiment.md`](../test/04_gpt2_finetuning_experiment.md),
   [`docs/test/03_chat_interaction_test.md`](../test/03_chat_interaction_test.md)
 
-> ⚠️ **알려진 문제**: `data/agent/prepare.py`는 `data/shakespeare/prepare.py`를 복사해 만든 것이라
-> 다운로드 URL이 아직 tinyshakespeare를 가리킵니다. `input.txt`가 이미 있으면 다운로드를 건너뛰므로
-> 현재는 정상 동작하지만, `input.txt`가 없는 상태에서 실행하면 엉뚱하게 셰익스피어를 받아옵니다.
-> 파일 하단의 토큰 수 주석(301,966 / 36,059)도 셰익스피어 기준이라 실제 값과 다릅니다.
-
 ### 4. 기타
 
-- `.gitignore` 확장: `.venv/`, `out-*/`, `*.pt` 등 추가 (`data/agent/input.txt`는 예외로 추적)
-- 전체 파일이 CRLF 줄바꿈으로 변환됨 → `git diff`에서 README·노트북 등이 대량 변경된 것처럼
-  보이지만 실제 내용 차이는 없습니다. 비교할 때는 `git diff --ignore-cr-at-eol` 사용
+- `.gitignore` 확장: `.venv/`, `out-*/`, `*.pt`, `*.bin`, `*.pkl` 등 추가 (`data/agent/input.txt`는 예외로 추적)
+- 전체 파일이 CRLF 줄바꿈으로 변환됨 → `git diff`에서 README·노트북·LICENSE 등이 대량 변경된 것처럼
+  보이지만 실제 내용 차이는 없습니다. 비교할 때는 반드시 `--ignore-cr-at-eol`을 붙이세요
+  (붙이지 않으면 41개 파일 21,114줄, 붙이면 22개 파일 19,281줄)
+
+### 5. 알려진 버그 — 원본에는 없는 문제
+
+이 저장소의 수정 과정에서 생긴 문제들입니다. 원본 nanoGPT에는 해당하지 않습니다.
+
+**① `train.py:332` — 진행바가 `log_interval`마다 1칸만 전진**
+
+`pbar.update(1)`이 `if iter_num % log_interval == 0` 블록 안에 있습니다. `total=max_iters`인데
+`max_iters / log_interval`번만 갱신되므로 세 가지가 어긋납니다.
+
+- 진행바가 끝까지 차지 않음 (100 iters 완주해도 `10/100` 표시)
+- tqdm의 `s/it`이 **실제의 `log_interval`배** → 성능을 잘못 읽게 됨
+- ETA가 같은 배율로 부풀려짐
+
+수정하려면 `update`만 블록 밖으로 옮깁니다.
+
+```python
+        if master_process:
+            pbar.set_postfix(loss=f"{lossf:.4f}", mfu=f"{running_mfu*100:.2f}%")
+    if master_process:
+        pbar.update(1)
+    iter_num += 1
+```
+
+**② `train.py:339-340` — 도달 불가능한 `break` 중복** (동작 무영향)
+
+**③ `data/agent/prepare.py` — 셰익스피어 스크립트 복사본**
+
+`data/shakespeare/prepare.py`를 복사해 만든 탓에 다운로드 URL이 아직 tinyshakespeare를 가리킵니다.
+`input.txt`가 이미 있으면 다운로드를 건너뛰므로 현재는 정상 동작하지만, `input.txt`가 없는 상태에서
+실행하면 엉뚱하게 셰익스피어를 받아옵니다. 파일 하단의 토큰 수 주석(301,966 / 36,059)도
+셰익스피어 기준이라 실제 값과 다릅니다.
+
+### 차이 목록 갱신하기
+
+원본 대비 차이가 바뀌면 아래로 다시 뽑아 이 절을 갱신합니다.
+
+```bash
+# 파일별 변경량 (CRLF 노이즈 제외)
+git diff 3adf61e --ignore-cr-at-eol --stat
+
+# 코드 파일 상세 diff
+git diff 3adf61e --ignore-cr-at-eol -U2 -- '*.py'
+
+# 신규 파일만
+git diff 3adf61e --ignore-cr-at-eol --diff-filter=A --name-only
+```
+
+`3adf61e`("Update README to mention nanochat and deprecation")가 이 fork의 업스트림 마지막 커밋입니다.
 
 ---
 
