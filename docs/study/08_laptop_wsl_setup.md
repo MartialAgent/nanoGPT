@@ -92,13 +92,38 @@ uv pip install --python ~/venvs/nanogpt/bin/python numpy tiktoken tqdm transform
 
 venv를 `/mnt/c`가 아닌 `~/venvs`에 두는 이유는 두 가지입니다. `/mnt/c`는 9p 프로토콜을 거쳐 순차 읽기가 61 MB/s인 반면 네이티브 fs는 2.7 GB/s이고, Windows venv는 `Scripts/`, Linux venv는 `bin/` 구조라 한 디렉터리를 공유할 수도 없습니다.
 
-### 컴파일러 설치 (torch.compile 필수)
+### 빌드 툴체인 설치 (torch.compile 필수)
 
 ```bash
-sudo apt update && sudo apt install -y build-essential
+sudo apt update && sudo apt install -y build-essential python3-dev
 ```
 
-기본 Ubuntu에는 gcc·cc·clang·g++·make가 전혀 없습니다. `torch.compile`의 inductor 백엔드는 생성한 커널을 C로 컴파일하므로 이것 없이는 `--compile=True`가 실패합니다.
+WSL Ubuntu 기본 이미지는 서버·컨테이너용 최소 구성이라 개발 도구가 전혀 없습니다.
+`torch.compile`은 실행 시점에 코드를 생성해 **그 자리에서 컴파일**하므로 두 패키지가 모두 필요하며,
+하나씩 순서대로 드러납니다.
+
+| 패키지 | 제공하는 것 | 없으면 나는 오류 |
+|---|---|---|
+| `build-essential` | `gcc`, `g++`, `make`, `libc6-dev` | `Failed to find C compiler` |
+| `python3-dev` | `Python.h` 등 C 확장 빌드용 헤더 | `fatal error: Python.h: No such file or directory` |
+
+`python3-dev`가 필요한 이유는 triton이 `cuda_utils` 확장 모듈을 빌드하기 때문입니다.
+venv가 시스템 CPython(`/usr/bin/python3.12`)에서 생성됐으므로 시스템 쪽 헤더를 참조합니다.
+
+설치 후 실제 동작 확인:
+
+```bash
+python -c "import torch; f=torch.compile(lambda x: x*2); print(f(torch.ones(4,device='cuda')))"
+```
+
+`tensor([2., 2., 2., 2.], device='cuda:0')`가 나오면 컴파일 → GPU 실행 경로가 끝까지 뚫린 것입니다.
+첫 실행은 컴파일 때문에 30초 안팎 걸립니다.
+
+> `sudo`가 비밀번호를 요구하는데 비밀번호를 모른다면, Windows PowerShell에서 root로 우회할 수 있습니다.
+> `wsl -d Ubuntu -u root -e apt install -y build-essential python3-dev`
+> 비밀번호 재설정은 `wsl -d Ubuntu -u root passwd <사용자명>` (현재 비밀번호를 묻지 않음).
+> 두 명령 모두 **Windows 프롬프트**(`PS C:\...>`)에서 실행해야 합니다. `wsl`은 Windows 명령어라
+> Ubuntu 안(`user@HOST:~$`)에서는 `command not found`가 납니다.
 
 ---
 
@@ -171,6 +196,52 @@ python sample.py --out_dir=out-shakespeare-char --start="ROMEO:" --temperature=0
 python -c "import torch;c=torch.load('out-shakespeare-char/ckpt.pt',map_location='cpu');print('iter',c['iter_num'],'val_loss',c['best_val_loss'])"
 ```
 
+### 4-1. 학습 로그 읽는 법
+
+**시작 시**
+
+| 출력 | 뜻 |
+|---|---|
+| `found vocab_size = 65` | 이 데이터의 고유 문자 종류 수 (`meta.pkl`에서 읽음) |
+| `number of parameters: 10.65M` | 모델 가중치 개수. GPT-2 Small(124M)의 약 1/12 |
+| `tokens per iteration will be: 16,384` | 1 iteration에 쓰는 토큰 수 (`batch_size 64 × block_size 256`) |
+| `using fused AdamW: True` | 옵티마이저 연산을 CUDA 커널 하나로 융합 (더 빠름) |
+| `compiling the model...` | inductor가 코드 생성·컴파일 중. 1~3분 멈춘 것처럼 보임 |
+
+**진행 중**
+
+```
+step 0: train loss 4.2853, val loss 4.2842
+saving checkpoint to out-shakespeare-char
+```
+
+- **train loss**: 학습 데이터에 대한 예측 오차
+- **val loss**: 학습에 쓰지 않은 검증 데이터에 대한 오차 — 실제 성능 지표
+- **시작값 해석**: `shakespeare_char`는 vocab이 65자이므로 무작위 추측의 이론적 손실이
+  `ln(65) ≈ 4.17`입니다. 초기 4.28은 아직 아무것도 학습하지 않은 상태라는 뜻입니다
+- 5000 iters 후 val loss **1.4~1.5** 부근이면 정상입니다
+- `saving checkpoint`는 val loss가 이전 최저치를 갱신했다는 뜻입니다
+  (`always_save_checkpoint = False`이므로 개선될 때만 저장)
+
+**진행바**
+
+```
+Training: 10%|█ | 10/100 [02:40<24:06, loss=2.4599, mfu=1.44%]
+```
+
+- **mfu**: Model FLOPs Utilization. GPU 이론 성능(`model.py`의 `flops_promised`) 대비 실제 활용률.
+  작은 모델은 GPU를 채우지 못해 낮게 나오는 것이 정상입니다
+- **`s/it`은 신뢰하지 마세요** — 아래 "진행바 s/it이 실제와 다름" 항목 참조.
+  실제 진척은 `step N: ...` 줄로 판단합니다
+
+**이상 신호**
+
+| 증상 | 원인 / 대처 |
+|---|---|
+| val loss가 내려가다 다시 상승 | 과적합. 이 설정은 의도적으로 그렇게 되며 최저점만 저장됨 |
+| loss가 `nan` | 수치 발산. bfloat16에서는 거의 발생하지 않음 |
+| `CUDA out of memory` | `--batch_size=32` 등으로 낮출 것 |
+
 ### 5. 성능 확인
 
 ```bash
@@ -225,6 +296,39 @@ RuntimeError: Failed to find C compiler. Please specify via CC environment varia
 ```
 
 **해결**: `sudo apt install -y build-essential`
+
+### torch.compile — Python 헤더 부재
+
+`build-essential` 설치 후 gcc는 호출되지만 그다음 단계에서 막히는 경우입니다.
+
+```
+/tmp/tmpXXXX/main.c:5:10: fatal error: Python.h: No such file or directory
+    5 | #include <Python.h>
+...
+subprocess.CalledProcessError: Command '['/usr/bin/gcc', ..., '-I/usr/include/python3.12']'
+    returned non-zero exit status 1.
+```
+
+**원인**: gcc 명령줄에 `-I/usr/include/python3.12`가 있지만 그 디렉터리에 `Python.h`가 없습니다.
+Ubuntu는 Python 런타임과 개발 헤더를 별도 패키지로 나눕니다.
+
+**해결**: `sudo apt install -y python3-dev`
+
+### 명령 실행 중 누른 키가 나중에 실행됨
+
+```
+$ python -c "..."
+A                                    ← 실행 중 누른 키가 즉시 에코됨
+tensor([2., 2., 2., 2.], ...)        ← 30초 뒤 실제 출력
+A: command not found                 ← 종료 후 bash가 버퍼의 A를 명령으로 해석
+```
+
+**원인**: 앞 명령이 도는 동안 bash는 stdin을 읽지 않습니다. 누른 키는 화면에 에코되면서
+커널 입력 큐에 쌓여 있다가, 명령이 끝나 bash가 복귀하면 명령줄로 처리됩니다.
+개행(Enter)까지 들어갔다면 완성된 명령으로 실행됩니다.
+
+**대처**: 긴 명령 실행 중에는 키를 누르지 않습니다. 위 사례는 `A`라는 명령이 없어 무해했지만,
+버퍼에 쌓인 글자가 우연히 실제 명령을 이루면 그대로 실행되므로 원리상 주의가 필요합니다.
 
 ### 진행바 s/it이 실제와 다름
 

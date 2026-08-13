@@ -23,6 +23,7 @@ nanoGPT는 Andrej Karpathy가 만든 GPT 언어 모델의 **최소한의 구현�
 | 06 | [실습 가이드](./06_hands_on.md) | 직접 실행해보는 단계별 실습 |
 | 07 | [사전학습과 데이터 처리](./07_pretraining_and_data.md) | 원본 텍스트 → `.bin` 변환 과정 상세 |
 | 08 | [랩톱 WSL 환경 구축](./08_laptop_wsl_setup.md) | RTX 4060 Laptop + WSL 설정과 명령어 레퍼런스 |
+| 09 | [GPU · CUDA · 텐서 기초](./09_gpu_cuda_tensor.md) | `cuda`, `tensor`, `dtype`, `torch.compile`이 뭔지 |
 
 > 실행 환경 세팅·GPU 튜닝·실험 결과 기록은 별도로 [`docs/test/`](../test/00_system_setup.md)에 있습니다.
 
