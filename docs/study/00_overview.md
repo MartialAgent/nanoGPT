@@ -25,6 +25,7 @@ nanoGPT는 Andrej Karpathy가 만든 GPT 언어 모델의 **최소한의 구현�
 | 08 | [랩톱 WSL 환경 구축](./08_laptop_wsl_setup.md) | RTX 4060 Laptop + WSL 설정과 명령어 레퍼런스 |
 | 09 | [GPU · CUDA · 텐서 기초](./09_gpu_cuda_tensor.md) | `cuda`, `tensor`, `dtype`, `torch.compile`이 뭔지 |
 | 10 | [입문 Q&A](./10_faq_basics.md) | `input.txt`·`.bin`·`meta.pkl`·`ckpt.pt`가 각각 뭔지 (실측 덤프 포함) |
+| 11 | [Q·K·V 차원 워크북](./11_qkv_dimension_workbook.ipynb) | 노트북. 어텐션의 B·T·C 변형을 빈칸 채우며 직접 검산 |
 
 > 실행 환경 세팅·GPU 튜닝·실험 결과 기록은 별도로 [`docs/test/`](../test/00_system_setup.md)에 있습니다.
 
@@ -99,7 +100,7 @@ CRLF 노이즈를 제외한 실제 내용 변경입니다 (`git diff 3adf61e --i
 | `data/agent/prepare.py` ★ | 신규 33줄 | Agent 데이터 토크나이징 |
 | `data/agent/input.txt` ★ | 신규 17,001줄 | Agent 문서 데이터 |
 | `.gitignore` | 33줄 | 체크포인트·venv 제외 |
-| `docs/` ★ | 신규 14개 | 학습 자료 + 실험 기록 |
+| `docs/` ★ | 신규 17개 | 학습 자료(노트북 1개 포함) + 실험 기록 |
 
 `★` = 원본에 없는 신규 파일. 코드 변경은 실질적으로 `train.py`·`model.py` 두 개에 집중돼 있습니다.
 
