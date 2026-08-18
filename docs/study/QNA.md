@@ -1,9 +1,10 @@
-# 10. 입문 Q&A — 데이터와 파일 구조
+# 입문 Q&A — 데이터와 파일 구조
 
-`00_overview.md`를 읽다가 막히는 지점들을 문답으로 정리했습니다.
+[`README.md`](./README.md)를 읽다가 막히는 지점들을 문답으로 정리했습니다.
 실제 파일을 열어 확인한 내용이라 값은 모두 이 저장소 기준 실측치입니다.
 
-> 대상: `data/` 폴더와 파이프라인 산출물. 모델 내부는 `02_model_implementation.md` 참조.
+> 대상: `data/` 폴더와 파이프라인 산출물.
+> 모델 내부는 [README.md 5장 — 모델 구현 분석](./README.md#5-모델-구현-분석-modelpy) 참조.
 
 ---
 
@@ -744,7 +745,7 @@ _orig_mod.lm_head.weight                      (65, 384)     ← 출력층
 | `n_head=6` | — | **모양에 안 보임** (실행 중에만 쪼갬) |
 
 > `wte`와 `lm_head`가 둘 다 `(65,384)`인 것은 우연이 아니다 —
-> 가중치 공유(weight tying). `02_model_implementation.md` 참조.
+> 가중치 공유(weight tying). [README.md 5.7](./README.md#57-gpt-modelpy118) 참조.
 
 실제 값을 열어보면:
 
@@ -842,6 +843,6 @@ ckpt.pt        wte(65,384) = [-0.0191, 0.0604, ...]  기계가 배운 것
 
 ## 다음 단계
 
-- 모델 내부 구조 → [02_model_implementation.md](./02_model_implementation.md)
-- `.bin`에서 배치를 뽑는 방법 (`get_batch`) → [03_training_pipeline.md](./03_training_pipeline.md)
-- 직접 실행해보기 → [06_hands_on.md](./06_hands_on.md)
+- 모델 내부 구조 → [README.md 5장](./README.md#5-모델-구현-분석-modelpy)
+- `.bin`에서 배치를 뽑는 방법 (`get_batch`) → [README.md 7.3](./README.md#73-데이터-로딩)
+- 직접 실행해보기 → [README.md 9장](./README.md#9-실습-가이드)
