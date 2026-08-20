@@ -91,7 +91,8 @@ data/<셋>/prepare.py              (CLI·설정 병합)                      └
 ## 1.2 프로젝트 파일 구조
 
 저장소의 **모든 파일**입니다.
-`★` = 원본 nanoGPT에 없는 이 저장소의 추가물, `⚙` = 실행으로 생기는 산출물(git 제외).
+`★` = 원본 nanoGPT에 없는 이 저장소의 추가물, `⚙` = 실행으로 생기는 산출물(git 제외),
+`📦` = 실행 경로에서 빼내 `archive/` 아래로 격리한 파일(2.4 참조).
 
 ```
 nanoGPT/
@@ -99,7 +100,6 @@ nanoGPT/
 ├── model.py                     330줄   GPT 정의 (GPTConfig·LayerNorm·CausalSelfAttention·MLP·Block·GPT)
 ├── train.py                     344줄   학습 루프 (원본 337줄 + tqdm)
 ├── sample.py                     89줄   텍스트 생성 (단발성)
-├── chat.py                ★      57줄   학습된 모델과 대화하는 REPL
 ├── bench.py                     117줄   속도·MFU 벤치마크
 ├── configurator.py               47줄   설정 파일·CLI 인자 오버라이드 (exec 기반)
 │
@@ -107,7 +107,6 @@ nanoGPT/
 │   ├── train_shakespeare_char.py 37줄   입문용 scratch 학습 (10.65M, 5000 iters)
 │   ├── train_gpt2.py             25줄   GPT-2 124M 전체 재현 (8×A100, ~5일)
 │   ├── finetune_shakespeare.py   25줄   GPT-2 XL(1.5B) → 셰익스피어 파인튜닝
-│   ├── finetune_agent.py  ★      27줄   GPT-2 124M → AI Agent 문서 파인튜닝
 │   ├── eval_gpt2.py               8줄   ┐ 학습 없이 eval_only=True로
 │   ├── eval_gpt2_medium.py        8줄   │ 공개 GPT-2의 손실만 측정
 │   ├── eval_gpt2_large.py         8줄   │ (124M / 350M / 774M / 1558M)
@@ -124,9 +123,6 @@ nanoGPT/
 │   ├── shakespeare/                     같은 원문의 BPE 판 — prepare 미실행
 │   │   ├── prepare.py            33줄
 │   │   └── readme.md
-│   ├── agent/             ★             AI Agent 문서 — 이 저장소 추가 실험
-│   │   ├── prepare.py     ★      33줄   (셰익스피어 복사본 — 2.5의 알려진 버그)
-│   │   └── input.txt      ★   17,001줄  AutoGPT 문서 1.1MB
 │   └── openwebtext/                     대규모 (~54GB / 9B 토큰) — 이 저장소 미사용
 │       ├── prepare.py            81줄
 │       └── readme.md
@@ -139,9 +135,17 @@ nanoGPT/
 │   └── test/              ★             환경 세팅 / GPU 튜닝 / 실험 기록
 │       ├── 00_system_setup.md
 │       ├── 01_gpu_optimization.md
-│       ├── 02_training_report_rtx2070.md
-│       ├── 03_chat_interaction_test.md
-│       └── 04_gpt2_finetuning_experiment.md
+│       └── 02_training_report_rtx2070.md
+│
+├── archive/               ★📦           실행 경로에서 격리한 실험 보관소
+│   └── agent-experiment/  ★📦
+│       ├── README.md      ★📦           보관 경위·복원 절차·미완 사항
+│       └── repo/          ★📦           저장소 루트 기준 원래 경로를 그대로 보존
+│           ├── chat.py                57줄   대화형 REPL
+│           ├── config/finetune_agent.py 27줄 GPT-2 124M → AI Agent 파인튜닝
+│           ├── data/agent/prepare.py   33줄  (셰익스피어 복사본 — 2.5의 알려진 버그)
+│           ├── data/agent/input.txt 17,001줄 AutoGPT 문서 1.1MB
+│           └── docs/test/03·04.md            대화·파인튜닝 실험 기록
 │
 ├── scaling_laws.ipynb                   Chinchilla 스케일링 재현 (원본 부속)
 ├── transformer_sizing.ipynb             FLOPs·파라미터·메모리 이론 추정 (원본 부속)
@@ -224,9 +228,11 @@ CRLF 노이즈를 제외한 실제 내용 변경입니다 (`git diff 3adf61e --i
 | `data/agent/input.txt` ★📦   | 신규 17,001줄 | Agent 문서 데이터 — **격리됨**                |
 | `.gitignore`                  | 33줄          | 체크포인트·venv 제외                          |
 | `docs/` ★                    | 신규 6개      | 학습 자료 3개(노트북 1개 포함) + 실험 기록 3개 |
+| `archive/` ★📦               | 신규 7개      | 격리 보관소 — 실행 경로에 관여하지 않음       |
 
-`★` = 원본에 없는 신규 파일, `📦` = **격리됨** — 저장소에서 빼내 `archive/agent-experiment/`로 옮긴 파일.
-코드 변경은 실질적으로 `train.py`·`model.py` 두 개에 집중돼 있습니다.
+`★` = 원본에 없는 신규 파일, `📦` = **격리됨** — 실행 경로에서 빼내 `archive/agent-experiment/`로 옮긴 파일.
+격리된 파일은 저장소에 남아 있지만 **어떤 실행 경로도 참조하지 않습니다.**
+따라서 실행에 관여하는 원본 대비 차이는 `train.py`·`model.py`·`bench.py`·`sample.py` 4개, 21줄이 전부입니다.
 
 ## 2.2 GPU 하드웨어에 맞춘 튜닝
 
@@ -266,10 +272,13 @@ CRLF 노이즈를 제외한 실제 내용 변경입니다 (`git diff 3adf61e --i
 
 원본에는 없는 "GPT-2를 특정 도메인 문서로 파인튜닝하고 대화해보는" 실험 세트입니다.
 
-> **📦 이 절의 파일은 현재 저장소에 없습니다.**
+> **📦 이 절의 파일은 실행 경로에서 격리되었습니다.**
 > 원본 대비 차이를 "로컬 환경 대응 + 실행성 수정"으로만 한정하기 위해
-> `archive/agent-experiment/repo/` 로 옮겨 보관 중입니다 (삭제가 아니라 격리).
-> 보관 경위·복원 절차·미완 사항은 `archive/agent-experiment/README.md` 참조.
+> [`archive/agent-experiment/repo/`](../../archive/agent-experiment/) 아래로 옮겼습니다
+> (삭제가 아니라 격리 — 저장소에는 그대로 남아 있고, 다만 어떤 실행 경로도
+> 이들을 참조하지 않습니다).
+> 보관 경위·복원 절차·미완 사항은
+> [`archive/agent-experiment/README.md`](../../archive/agent-experiment/README.md) 참조.
 > 아래 설명은 **격리 시점의 상태 기록**으로 남겨 둡니다.
 
 ```
@@ -280,9 +289,9 @@ data/agent/prepare.py  →  config/finetune_agent.py  →  chat.py
 - 데이터: AI 에이전트 관련 영문 문서 약 17,000줄
 - 설정: `init_from='gpt2'`, `learning_rate=3e-5`, `decay_lr=False`, `max_iters=500`, `batch_size=4`, `grad_accum=8`
 - `chat.py`: 체크포인트를 로드해 `input()` 루프로 대화. `_orig_mod.` 접두사(torch.compile 흔적)를 제거하는 처리가 들어 있음
-- 결과 기록: `docs/test/04_gpt2_finetuning_experiment.md`,
-  `docs/test/03_chat_interaction_test.md` — 둘 다 함께 격리되어
-  `archive/agent-experiment/repo/docs/test/` 에 있습니다 (링크 아님)
+- 결과 기록: 둘 다 함께 격리되어 `archive/agent-experiment/repo/docs/test/` 아래에 있습니다 —
+  [`04_gpt2_finetuning_experiment.md`](../../archive/agent-experiment/repo/docs/test/04_gpt2_finetuning_experiment.md),
+  [`03_chat_interaction_test.md`](../../archive/agent-experiment/repo/docs/test/03_chat_interaction_test.md)
 
 ## 2.5 기타 변경과 알려진 버그
 
@@ -294,7 +303,8 @@ data/agent/prepare.py  →  config/finetune_agent.py  →  chat.py
   (붙이지 않으면 41개 파일 21,114줄, 붙이면 22개 파일 19,281줄)
 
 **알려진 버그 📦 — `data/agent/prepare.py`가 셰익스피어 스크립트 복사본입니다.**
-(해당 파일은 2.4와 함께 격리되어 현재 저장소에 없습니다. 기록만 남깁니다.)
+(해당 파일은 2.4와 함께 `archive/agent-experiment/repo/data/agent/prepare.py`로 격리되어
+실행 경로에는 없습니다. 실험을 재개할 때 먼저 고쳐야 하므로 기록을 남깁니다.)
 이 저장소의 수정 과정에서 생긴 문제로, 원본 nanoGPT에는 해당하지 않습니다.
 `data/shakespeare/prepare.py`를 복사해 만든 탓에 다운로드 URL이 아직 tinyshakespeare를 가리킵니다.
 `input.txt`가 이미 있으면 다운로드를 건너뛰므로 현재는 정상 동작하지만, `input.txt`가 없는 상태에서
