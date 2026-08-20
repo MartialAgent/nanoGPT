@@ -228,6 +228,7 @@ CRLF 노이즈를 제외한 실제 내용 변경입니다 (`git diff 3adf61e --i
 | `data/agent/input.txt` ★📦   | 신규 17,001줄 | Agent 문서 데이터 — **격리됨**                |
 | `.gitignore`                  | 33줄          | 체크포인트·venv 제외                          |
 | `docs/` ★                    | 신규 6개      | 학습 자료 3개(노트북 1개 포함) + 실험 기록 3개 |
+| `tools/inspect_ckpt.py` ★     | 신규 176줄    | ckpt.pt·*.bin·meta.pkl 내용 뷰어 — 실행 경로 무관 |
 | `archive/` ★📦               | 신규 7개      | 격리 보관소 — 실행 경로에 관여하지 않음       |
 
 `★` = 원본에 없는 신규 파일, `📦` = **격리됨** — 실행 경로에서 빼내 `archive/agent-experiment/`로 옮긴 파일.
