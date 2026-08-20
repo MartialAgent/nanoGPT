@@ -11,6 +11,7 @@ nanoGPT는 Andrej Karpathy가 만든 GPT 언어 모델의 **최소한의 구현�
 [`QNA.md`](./QNA.md)에, 어텐션의 차원 변형을 직접 검산해보는 노트북은
 [`qkv_dimension_workbook.ipynb`](./qkv_dimension_workbook.ipynb)에 따로 있습니다.
 실행 환경 세팅·GPU 튜닝·실험 결과 기록은 [`docs/test/`](../test/00_system_setup.md)에 있습니다.
+읽다가 막힌 지점과 그 해소 과정을 장별로 쌓아둔 학습 로그는 [`memo/`](./memo/README.md)에 있습니다.
 
 ---
 
@@ -64,12 +65,12 @@ data/<셋>/prepare.py              (CLI·설정 병합)                      └
 
 **막별 상세 — 실행 파일과 입출력**
 
-| 막 | 실행 명령 | 읽는 파일 | 만드는 파일 |
-|---|---|---|---|
-| ① 토크나이징 | `python data/<셋>/prepare.py` | `input.txt` (없으면 외부 URL에서 다운로드) | `train.bin`, `val.bin`, `meta.pkl`(문자 단위만) |
-| ② 학습 | `python train.py config/<설정>.py` | `config/<설정>.py`, `configurator.py`, `model.py`, `train.bin`·`val.bin`·`meta.pkl` / `init_from='gpt2'`면 HF 캐시 가중치 | `<out_dir>/ckpt.pt` |
-| ③-a 생성 | `python sample.py --out_dir=...` | `ckpt.pt`, `configurator.py`, `model.py`, `meta.pkl` 또는 tiktoken BPE 사전 | 없음 (화면 출력만) |
-| ③-b 대화 | `python chat.py` | `out-agent-ft/ckpt.pt`, `model.py`, tiktoken BPE 사전 | 없음 (화면 출력만) |
+| 막            | 실행 명령                            | 읽는 파일                                                                                                                                 | 만드는 파일                                           |
+| ------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| ① 토크나이징 | `python data/<셋>/prepare.py`      | `input.txt` (없으면 외부 URL에서 다운로드)                                                                                              | `train.bin`, `val.bin`, `meta.pkl`(문자 단위만) |
+| ② 학습       | `python train.py config/<설정>.py` | `config/<설정>.py`, `configurator.py`, `model.py`, `train.bin`·`val.bin`·`meta.pkl` / `init_from='gpt2'`면 HF 캐시 가중치 | `<out_dir>/ckpt.pt`                                 |
+| ③-a 생성     | `python sample.py --out_dir=...`   | `ckpt.pt`, `configurator.py`, `model.py`, `meta.pkl` 또는 tiktoken BPE 사전                                                       | 없음 (화면 출력만)                                    |
+| ③-b 대화     | `python chat.py`                   | `out-agent-ft/ckpt.pt`, `model.py`, tiktoken BPE 사전                                                                                 | 없음 (화면 출력만)                                    |
 
 - **`model.py`와 `configurator.py`는 막을 가로지르는 공용 부품**입니다. `model.py`는 ②③ 모두에서
   `import`되고, `configurator.py`는 `train.py`·`sample.py`·`bench.py`가 `exec()`로 불러 씁니다
@@ -79,13 +80,13 @@ data/<셋>/prepare.py              (CLI·설정 병합)                      └
 
 **파이프라인에 직접 참여하지 않는 파일**
 
-| 파일 | 역할 | 주의 |
-|---|---|---|
-| `bench.py` | 속도·MFU 측정 | 기본값이 `real_data=True` / `dataset='openwebtext'`라 **`data/openwebtext/train.bin`을 요구**합니다. 준비하지 않았다면 `--real_data=False`로 난수 배치를 써야 합니다 |
-| `config/eval_gpt2*.py` | 학습이 아니라 `eval_only=True`로 공개 GPT-2의 손실만 측정 | `train.py`에 넘기지만 첫 eval 직후 종료됩니다 (`train.py:290`) |
-| `scaling_laws.ipynb` | Chinchilla 스케일링 법칙 재현 | 원본 부속 분석 노트북 |
-| `transformer_sizing.ipynb` | FLOPs·파라미터·메모리 이론 추정 | 원본 부속 분석 노트북 |
-| `docs/` | 학습 자료와 실험 기록 | 이 저장소에서 추가 |
+| 파일                         | 역할                                                       | 주의                                                                                                                                                                              |
+| ---------------------------- | ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bench.py`                 | 속도·MFU 측정                                             | 기본값이`real_data=True` / `dataset='openwebtext'`라 **`data/openwebtext/train.bin`을 요구**합니다. 준비하지 않았다면 `--real_data=False`로 난수 배치를 써야 합니다 |
+| `config/eval_gpt2*.py`     | 학습이 아니라`eval_only=True`로 공개 GPT-2의 손실만 측정 | `train.py`에 넘기지만 첫 eval 직후 종료됩니다 (`train.py:290`)                                                                                                                |
+| `scaling_laws.ipynb`       | Chinchilla 스케일링 법칙 재현                              | 원본 부속 분석 노트북                                                                                                                                                             |
+| `transformer_sizing.ipynb` | FLOPs·파라미터·메모리 이론 추정                          | 원본 부속 분석 노트북                                                                                                                                                             |
+| `docs/`                    | 학습 자료와 실험 기록                                      | 이 저장소에서 추가                                                                                                                                                                |
 
 ## 1.2 프로젝트 파일 구조
 
@@ -211,20 +212,21 @@ GPT는 **다음 토큰 예측기**입니다. 앞에 나온 단어들을 보고 �
 
 CRLF 노이즈를 제외한 실제 내용 변경입니다 (`git diff 3adf61e --ignore-cr-at-eol --stat`).
 
-| 파일                            | 변경량        | 성격                                   |
-| ------------------------------- | ------------- | -------------------------------------- |
-| `train.py`                    | 21줄          | tqdm 진행바, 배치 조정, 종료 조건      |
-| `model.py`                    | 6줄           | `estimate_mfu()` 기준 GPU 변경       |
-| `bench.py`                    | 4줄           | 배치 조정, 주석                        |
-| `sample.py`                   | 2줄           | 주석만                                 |
-| `chat.py` ★                  | 신규 57줄     | 대화형 REPL                            |
-| `config/finetune_agent.py` ★ | 신규 27줄     | Agent 파인튜닝 설정                    |
-| `data/agent/prepare.py` ★    | 신규 33줄     | Agent 데이터 토크나이징                |
-| `data/agent/input.txt` ★     | 신규 17,001줄 | Agent 문서 데이터                      |
-| `.gitignore`                  | 33줄          | 체크포인트·venv 제외                  |
-| `docs/` ★                    | 신규 8개      | 학습 자료 3개(노트북 1개 포함) + 실험 기록 5개 |
+| 파일                            | 변경량        | 성격                                           |
+| ------------------------------- | ------------- | ---------------------------------------------- |
+| `train.py`                    | 21줄          | tqdm 진행바, 배치 조정, 종료 조건              |
+| `model.py`                    | 6줄           | `estimate_mfu()` 기준 GPU 변경               |
+| `bench.py`                    | 4줄           | 배치 조정, 주석                                |
+| `sample.py`                   | 2줄           | 주석만                                         |
+| `chat.py` ★📦                | 신규 57줄     | 대화형 REPL — **격리됨**                      |
+| `config/finetune_agent.py` ★📦 | 신규 27줄   | Agent 파인튜닝 설정 — **격리됨**              |
+| `data/agent/prepare.py` ★📦  | 신규 33줄     | Agent 데이터 토크나이징 — **격리됨**          |
+| `data/agent/input.txt` ★📦   | 신규 17,001줄 | Agent 문서 데이터 — **격리됨**                |
+| `.gitignore`                  | 33줄          | 체크포인트·venv 제외                          |
+| `docs/` ★                    | 신규 6개      | 학습 자료 3개(노트북 1개 포함) + 실험 기록 3개 |
 
-`★` = 원본에 없는 신규 파일. 코드 변경은 실질적으로 `train.py`·`model.py` 두 개에 집중돼 있습니다.
+`★` = 원본에 없는 신규 파일, `📦` = **격리됨** — 저장소에서 빼내 `archive/agent-experiment/`로 옮긴 파일.
+코드 변경은 실질적으로 `train.py`·`model.py` 두 개에 집중돼 있습니다.
 
 ## 2.2 GPU 하드웨어에 맞춘 튜닝
 
@@ -253,14 +255,22 @@ CRLF 노이즈를 제외한 실제 내용 변경입니다 (`git diff 3adf61e --i
 | 진행 출력              | `print(f"iter ...")`      | `pbar.set_postfix(loss=..., mfu=...)` (`log_interval`마다) |
 | 진행바 전진            | 해당 없음                   | `pbar.update(1)` (**매 iteration**)                    |
 | eval / 체크포인트 로그 | `print(...)`              | `tqdm.write(...)` (진행바를 깨지 않음)                       |
-| 종료 조건              | `if iter_num > max_iters` | `if iter_num >= max_iters`                                   |
+| 종료 조건              | `if iter_num > max_iters` | `if iter_num > max_iters` (**원본과 동일**)                |
 
 - `from tqdm import tqdm` 의존성이 추가되었으나 원본 README의 설치 목록에는 없습니다 → `pip install tqdm` 별도 필요
-- 종료 조건 변경으로 총 iteration이 **1회 감소**합니다 (원본은 `max_iters + 1`회 실행)
+- 종료 조건은 원본 그대로입니다 → 총 iteration은 원본과 같은 `max_iters + 1`회.
+  (한때 `>=`로 바꿔 1회 적게 돌던 시기가 있었으나 원본에 맞춰 되돌렸습니다.
+  이에 맞춰 진행바 총량도 `tqdm(total=max_iters + 1)`로 잡습니다.)
 
-## 2.4 AI Agent 파인튜닝 실험 추가
+## 2.4 AI Agent 파인튜닝 실험 추가 📦 격리됨
 
 원본에는 없는 "GPT-2를 특정 도메인 문서로 파인튜닝하고 대화해보는" 실험 세트입니다.
+
+> **📦 이 절의 파일은 현재 저장소에 없습니다.**
+> 원본 대비 차이를 "로컬 환경 대응 + 실행성 수정"으로만 한정하기 위해
+> `archive/agent-experiment/repo/` 로 옮겨 보관 중입니다 (삭제가 아니라 격리).
+> 보관 경위·복원 절차·미완 사항은 `archive/agent-experiment/README.md` 참조.
+> 아래 설명은 **격리 시점의 상태 기록**으로 남겨 둡니다.
 
 ```
 data/agent/prepare.py  →  config/finetune_agent.py  →  chat.py
@@ -270,17 +280,21 @@ data/agent/prepare.py  →  config/finetune_agent.py  →  chat.py
 - 데이터: AI 에이전트 관련 영문 문서 약 17,000줄
 - 설정: `init_from='gpt2'`, `learning_rate=3e-5`, `decay_lr=False`, `max_iters=500`, `batch_size=4`, `grad_accum=8`
 - `chat.py`: 체크포인트를 로드해 `input()` 루프로 대화. `_orig_mod.` 접두사(torch.compile 흔적)를 제거하는 처리가 들어 있음
-- 결과 기록: [`docs/test/04_gpt2_finetuning_experiment.md`](../test/04_gpt2_finetuning_experiment.md),
-  [`docs/test/03_chat_interaction_test.md`](../test/03_chat_interaction_test.md)
+- 결과 기록: `docs/test/04_gpt2_finetuning_experiment.md`,
+  `docs/test/03_chat_interaction_test.md` — 둘 다 함께 격리되어
+  `archive/agent-experiment/repo/docs/test/` 에 있습니다 (링크 아님)
 
 ## 2.5 기타 변경과 알려진 버그
 
-- `.gitignore` 확장: `.venv/`, `out-*/`, `*.pt`, `*.bin`, `*.pkl` 등 추가 (`data/agent/input.txt`는 예외로 추적)
+- `.gitignore` 확장: `.venv/`, `out-*/`, `*.pt`, `*.bin`, `*.pkl` 등 추가
+  (`data/shakespeare_char/input.txt`는 예외로 추적 — 원본은 이를 무시하고 `prepare.py`가
+  매번 내려받지만, `prepare.py`에 존재 여부 가드가 있어 **실행 결과는 원본과 동일**합니다)
 - 전체 파일이 CRLF 줄바꿈으로 변환됨 → `git diff`에서 README·노트북·LICENSE 등이 대량 변경된 것처럼
   보이지만 실제 내용 차이는 없습니다. 비교할 때는 반드시 `--ignore-cr-at-eol`을 붙이세요
   (붙이지 않으면 41개 파일 21,114줄, 붙이면 22개 파일 19,281줄)
 
-**알려진 버그 — `data/agent/prepare.py`가 셰익스피어 스크립트 복사본입니다.**
+**알려진 버그 📦 — `data/agent/prepare.py`가 셰익스피어 스크립트 복사본입니다.**
+(해당 파일은 2.4와 함께 격리되어 현재 저장소에 없습니다. 기록만 남깁니다.)
 이 저장소의 수정 과정에서 생긴 문제로, 원본 nanoGPT에는 해당하지 않습니다.
 `data/shakespeare/prepare.py`를 복사해 만든 탓에 다운로드 URL이 아직 tinyshakespeare를 가리킵니다.
 `input.txt`가 이미 있으면 다운로드를 건너뛰므로 현재는 정상 동작하지만, `input.txt`가 없는 상태에서

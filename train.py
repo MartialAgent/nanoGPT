@@ -254,7 +254,8 @@ local_iter_num = 0 # number of iterations in the lifetime of this process
 raw_model = model.module if ddp else model # unwrap DDP container if needed
 running_mfu = -1.0
 if master_process:
-    pbar = tqdm(total=max_iters, initial=iter_num, desc="Training")
+    # upstream runs iterations 0..max_iters inclusive, i.e. max_iters + 1 steps
+    pbar = tqdm(total=max_iters + 1, initial=iter_num, desc="Training")
 while True:
 
     # determine and set the learning rate for this iteration
@@ -336,7 +337,7 @@ while True:
     local_iter_num += 1
 
     # termination conditions
-    if iter_num >= max_iters:
+    if iter_num > max_iters:
         if master_process: pbar.close()
         break
 
